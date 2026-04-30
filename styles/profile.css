@@ -1,0 +1,160 @@
+.profile-page {
+  background: #fffaf0;
+  min-height: 100vh;
+}
+
+.profile-hero {
+  padding: 7rem 1rem 3rem;
+  text-align: center;
+  background: linear-gradient(135deg, #2d3047, #463f5f);
+  color: #fff;
+}
+
+.profile-avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: #ffd166;
+  color: #2d3047;
+  display: grid;
+  place-items: center;
+  font-size: 3rem;
+  font-weight: 800;
+  margin: 0 auto 1rem;
+}
+
+.profile-hero h1 {
+  font-family: "Playfair Display", serif;
+  margin-bottom: 0.4rem;
+}
+
+.profile-hero p {
+  max-width: 580px;
+  margin: 0 auto;
+  color: rgba(255,255,255,0.78);
+}
+
+.profile-stats-row {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.35rem;
+}
+
+.profile-stat {
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.08);
+  padding: 0.75rem 1rem;
+}
+
+.profile-stat strong,
+.profile-stat span {
+  display: block;
+}
+
+.profile-stat strong {
+  color: #ffd166;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.profile-stat span {
+  margin-top: 0.35rem;
+  color: rgba(255,255,255,0.72);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1.2rem;
+}
+
+.profile-follow-btn,
+.profile-message-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 150px;
+  min-height: 42px;
+  border: 2px solid #ffd166;
+  border-radius: 999px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.profile-follow-btn {
+  background: #ffd166;
+  color: #2d3047;
+}
+
+.profile-message-btn {
+  background: transparent;
+  color: #ffd166;
+}
+
+.profile-follow-btn:hover,
+.profile-message-btn:hover {
+  transform: translateY(-1px);
+}
+
+.profile-follow-btn.following {
+  background: transparent;
+  color: #ffd166;
+}
+
+.profile-follow-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.profile-follow-msg {
+  min-height: 1.2rem;
+  margin-top: 0.55rem;
+  color: #ffd166;
+  font-size: 0.85rem;
+}
+
+.profile-recipe {
+  display: block;
+  height: 100%;
+  background: #fff;
+  border: 1px solid #efe4d2;
+  border-radius: 14px;
+  overflow: hidden;
+  text-decoration: none;
+  color: #2d3047;
+  box-shadow: 0 10px 25px rgba(45,48,71,.08);
+}
+
+.profile-recipe img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+}
+
+.profile-recipe strong,
+.profile-recipe span {
+  display: block;
+  padding: .8rem .9rem;
+}
+
+.profile-recipe span {
+  padding-top: 0;
+  color: #777;
+}
+
+.empty-state {
+  background: #fff;
+  border: 1px dashed #d9c8ad;
+  border-radius: 14px;
+  padding: 2rem;
+  text-align: center;
+}
