@@ -389,6 +389,43 @@ if ($action === "login") {
     $email = strtolower(trim($_POST["email"] ?? ""));
     $plain = $_POST["password"] ?? "";
 
+    if (is_gmail_address($email)) {
+        ensure_admin_accounts_table($conn);
+        $stmt = $conn->prepare("SELECT id, username, email, display_name, password, failed_login_attempts, locked_until FROM admin_accounts WHERE email = ? LIMIT 1");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $stmt->bind_result($adminId, $adminUsername, $adminEmail, $displayName, $adminHash, $adminFailed, $adminLockedUntil);
+        if ($stmt->fetch()) {
+            $stmt->close();
+            if ($adminLockedUntil && strtotime($adminLockedUntil) > time()) {
+                json_out(["success" => false, "message" => "This admin account is temporarily locked. Try again later."]);
+            }
+            if (!password_verify($plain, $adminHash)) {
+                $adminFailed++;
+                $locked = $adminFailed >= 3 ? date("Y-m-d H:i:s", time() + 15 * 60) : null;
+                $stmt = $conn->prepare("UPDATE admin_accounts SET failed_login_attempts = ?, locked_until = ? WHERE id = ?");
+                $stmt->bind_param("isi", $adminFailed, $locked, $adminId);
+                $stmt->execute();
+                $stmt->close();
+                json_out(["success" => false, "field" => "password", "message" => "Wrong admin password."]);
+            }
+
+            $stmt = $conn->prepare("UPDATE admin_accounts SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = ?");
+            $stmt->bind_param("i", $adminId);
+            $stmt->execute();
+            $stmt->close();
+
+            unset($_SESSION["user_id"], $_SESSION["user_name"]);
+            $_SESSION["admin_account_id"] = (int) $adminId;
+            $_SESSION["admin_username"] = $adminUsername;
+            $_SESSION["admin_email"] = $adminEmail;
+            $_SESSION["admin_display_name"] = $displayName;
+            log_activity($conn, null, "admin_login", "admin", (int) $adminId, $adminEmail . " signed in.");
+            json_out(["success" => true, "name" => $displayName, "redirect" => "admin.php#user-traffic"]);
+        }
+        $stmt->close();
+    }
+
     $stmt = $conn->prepare("SELECT id, first_name, password, failed_login_attempts, locked_until FROM users WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();

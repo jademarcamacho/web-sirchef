@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS sirchef_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE sirchef_db;
 
-DROP TABLE IF EXISTS site_settings, user_activity_logs, messages, chat_group_members, chat_groups, follows, saved_recipes, favorites, likes, post_media, user_posts, recipe_comments, recipe_ratings, user_posted_recipes, recipe_ingredients, recipes, newsletter_subscribers, contact_messages, password_resets, email_verifications, users;
+DROP TABLE IF EXISTS site_settings, admin_accounts, user_activity_logs, messages, chat_group_members, chat_groups, follows, saved_recipes, favorites, likes, post_media, user_posts, recipe_comments, recipe_ratings, user_posted_recipes, recipe_ingredients, recipes, newsletter_subscribers, contact_messages, password_resets, email_verifications, users;
 
 CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -250,6 +250,19 @@ CREATE TABLE user_activity_logs (
   user_agent VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE admin_accounts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(80) NOT NULL UNIQUE,
+  email VARCHAR(160) NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  display_name VARCHAR(120) NOT NULL DEFAULT 'SirChef Admin',
+  failed_login_attempts INT NOT NULL DEFAULT 0,
+  locked_until DATETIME NULL,
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE site_settings (

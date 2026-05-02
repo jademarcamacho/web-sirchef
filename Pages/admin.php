@@ -3,8 +3,6 @@ session_start();
 require_once "db.php";
 require_once "helpers.php";
 
-// If no admin exists yet, the first logged-in user who opens this page becomes admin.
-$adminCount = (int) $conn->query("SELECT COUNT(*) total FROM users WHERE role = 'admin'")->fetch_assoc()["total"];
 require_admin($conn);
 ensure_recipe_views_column($conn);
 
@@ -120,6 +118,48 @@ $counts = [
     "messages" => (int) $conn->query("SELECT COUNT(*) total FROM contact_messages")->fetch_assoc()["total"],
     "views" => (int) $conn->query("SELECT COALESCE(SUM(views),0) total FROM recipes")->fetch_assoc()["total"]
 ];
+$userTraffic = [
+    "daily" => [
+        "label" => "Daily Users",
+        "active" => (int) $conn->query("SELECT COUNT(DISTINCT user_id) total FROM user_activity_logs WHERE user_id IS NOT NULL AND created_at >= CURDATE()")->fetch_assoc()["total"],
+        "new" => (int) $conn->query("SELECT COUNT(*) total FROM users WHERE created_at >= CURDATE()")->fetch_assoc()["total"],
+        "range" => "Today"
+    ],
+    "weekly" => [
+        "label" => "Weekly Users",
+        "active" => (int) $conn->query("SELECT COUNT(DISTINCT user_id) total FROM user_activity_logs WHERE user_id IS NOT NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")->fetch_assoc()["total"],
+        "new" => (int) $conn->query("SELECT COUNT(*) total FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")->fetch_assoc()["total"],
+        "range" => "Last 7 days"
+    ],
+    "monthly" => [
+        "label" => "Monthly Users",
+        "active" => (int) $conn->query("SELECT COUNT(DISTINCT user_id) total FROM user_activity_logs WHERE user_id IS NOT NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")->fetch_assoc()["total"],
+        "new" => (int) $conn->query("SELECT COUNT(*) total FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")->fetch_assoc()["total"],
+        "range" => "Last 30 days"
+    ]
+];
+$recentUserActivity = $conn->query("SELECT u.first_name, u.last_name, u.email, MAX(l.created_at) last_seen, COUNT(*) actions FROM user_activity_logs l JOIN users u ON u.id = l.user_id WHERE l.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY u.id, u.first_name, u.last_name, u.email ORDER BY last_seen DESC LIMIT 8")->fetch_all(MYSQLI_ASSOC);
+$activityRows = $conn->query("SELECT DATE(created_at) label, COUNT(DISTINCT user_id) active_users, COUNT(*) actions FROM user_activity_logs WHERE user_id IS NOT NULL AND created_at >= DATE_SUB(CURDATE(), INTERVAL 13 DAY) GROUP BY DATE(created_at)")->fetch_all(MYSQLI_ASSOC);
+$registrationRows = $conn->query("SELECT DATE(created_at) label, COUNT(*) total FROM users WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 13 DAY) GROUP BY DATE(created_at)")->fetch_all(MYSQLI_ASSOC);
+$activityMap = [];
+foreach ($activityRows as $row) {
+    $activityMap[$row["label"]] = ["active_users" => (int) $row["active_users"], "actions" => (int) $row["actions"]];
+}
+$registrationMap = [];
+foreach ($registrationRows as $row) {
+    $registrationMap[$row["label"]] = (int) $row["total"];
+}
+$userTrendRows = [];
+for ($i = 13; $i >= 0; $i--) {
+    $date = date("Y-m-d", strtotime("-" . $i . " days"));
+    $userTrendRows[] = [
+        "label" => date("M j", strtotime($date)),
+        "active" => $activityMap[$date]["active_users"] ?? 0,
+        "registrations" => $registrationMap[$date] ?? 0,
+        "actions" => $activityMap[$date]["actions"] ?? 0
+    ];
+}
+$actionBreakdownRows = $conn->query("SELECT action label, COUNT(*) total FROM user_activity_logs WHERE user_id IS NOT NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) GROUP BY action ORDER BY total DESC LIMIT 8")->fetch_all(MYSQLI_ASSOC);
 $users = $conn->query("SELECT id, first_name, last_name, email, role, is_verified, created_at FROM users ORDER BY created_at DESC LIMIT 30")->fetch_all(MYSQLI_ASSOC);
 $contacts = $conn->query("SELECT first_name, last_name, email, subject, message, created_at FROM contact_messages ORDER BY created_at DESC LIMIT 8")->fetch_all(MYSQLI_ASSOC);
 $adminRecipes = $conn->query("SELECT id, title, cuisine, difficulty, image, views, created_at FROM recipes ORDER BY created_at DESC LIMIT 30")->fetch_all(MYSQLI_ASSOC);
@@ -138,18 +178,32 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
   <link rel="stylesheet" href="../styles/admin.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@300;400;500;600&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <?php include "header.php"; ?>
 <main class="admin-page">
   <section class="admin-hero">
-    <div>
+    <span class="admin-particle admin-p1"></span>
+    <span class="admin-particle admin-p2"></span>
+    <span class="admin-particle admin-p3"></span>
+    <div class="admin-hero-copy">
       <span class="admin-kicker"><i class="fas fa-user-shield"></i> SirChef Control Room</span>
       <h1>Admin Dashboard</h1>
       <p>Manage recipes, users, contact messages, recipe photos, and live viewing activity for SirChef.</p>
+      <div class="admin-hero-actions">
+        <a href="#add-recipe" class="admin-hero-btn primary"><i class="fas fa-plus"></i> Add Recipe</a>
+        <a href="dashboard.php" class="admin-hero-btn secondary"><i class="fas fa-arrow-left"></i> Dashboard</a>
+      </div>
     </div>
-    <a href="dashboard.php" class="admin-hero-btn"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+    <div class="admin-hero-plate" aria-hidden="true">
+      <img src="../Assets/Top view of ingredients of Italian spaghetti pasta with tomato sauce, and copy space.jpg" alt="">
+      <div class="admin-hero-metric">
+        <i class="fas fa-chart-line"></i>
+        <span><?= $counts["views"] ?></span>
+        <small>Total views</small>
+      </div>
+    </div>
   </section>
 
   <?php if ($message): ?><div class="alert alert-<?= e($messageType) ?>"><?= e($message) ?></div><?php endif; ?>
@@ -161,10 +215,63 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
     <div><strong><?= $counts["views"] ?></strong><span>Recipe Views</span></div>
   </section>
 
+  <section class="admin-card admin-user-traffic" id="user-traffic">
+    <div class="admin-card-head">
+      <div>
+        <span class="admin-section-label">User Traffic</span>
+        <h2><i class="fas fa-users-viewfinder"></i> Daily, Weekly, and Monthly Users</h2>
+      </div>
+      <span class="status-pill ready">Updated live</span>
+    </div>
+    <div class="traffic-grid">
+      <?php foreach ($userTraffic as $traffic): ?>
+        <article class="traffic-card">
+          <span><?= e($traffic["range"]) ?></span>
+          <strong><?= (int) $traffic["active"] ?></strong>
+          <h3><?= e($traffic["label"]) ?></h3>
+          <p><i class="fas fa-user-plus"></i> <?= (int) $traffic["new"] ?> new registrations</p>
+        </article>
+      <?php endforeach; ?>
+    </div>
+    <div class="recent-activity-panel">
+      <h3><i class="fas fa-clock-rotate-left"></i> Recent Active Users</h3>
+      <div class="recent-user-list">
+        <?php foreach ($recentUserActivity as $activeUser): ?>
+          <div class="recent-user-item">
+            <span class="recent-user-avatar"><?= e(strtoupper(substr($activeUser["first_name"], 0, 1) . substr($activeUser["last_name"], 0, 1))) ?></span>
+            <span class="recent-user-main">
+              <strong><?= e($activeUser["first_name"] . " " . $activeUser["last_name"]) ?></strong>
+              <small><?= e($activeUser["email"]) ?> &middot; <?= (int) $activeUser["actions"] ?> actions</small>
+            </span>
+            <time><?= e(date("M j, g:i A", strtotime($activeUser["last_seen"]))) ?></time>
+          </div>
+        <?php endforeach; ?>
+        <?php if (!$recentUserActivity): ?><p class="admin-note">No user activity has been recorded in the last 30 days yet.</p><?php endif; ?>
+      </div>
+    </div>
+  </section>
+
   <section class="admin-card admin-analytics">
     <div class="admin-card-head">
-      <h2><i class="fas fa-chart-column"></i> Graphs</h2>
+      <div>
+        <span class="admin-section-label">Live Kitchen Pulse</span>
+        <h2><i class="fas fa-chart-column"></i> Helpful Graphs</h2>
+      </div>
       <span class="status-pill ready">Live data</span>
+    </div>
+    <div class="chart-grid admin-user-chart-grid">
+      <div class="chart-panel">
+        <h3>Users by Period</h3>
+        <canvas id="userTrafficChart" height="220"></canvas>
+      </div>
+      <div class="chart-panel">
+        <h3>14-Day User Trend</h3>
+        <canvas id="userTrendChart" height="220"></canvas>
+      </div>
+      <div class="chart-panel">
+        <h3>Top User Actions</h3>
+        <canvas id="actionBreakdownChart" height="220"></canvas>
+      </div>
     </div>
     <div class="chart-grid">
       <div class="chart-panel">
@@ -183,7 +290,8 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
   </section>
 
   <section class="admin-grid">
-    <article class="admin-card">
+    <article class="admin-card" id="add-recipe">
+      <span class="admin-section-label">Recipe Studio</span>
       <h2><i class="fas fa-bowl-food"></i> Add Recipe</h2>
       <form method="post" class="recipe-admin-form" enctype="multipart/form-data">
         <input type="hidden" name="admin_action" value="add_recipe">
@@ -210,6 +318,7 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
     </article>
 
     <article class="admin-card">
+      <span class="admin-section-label">Inbox</span>
       <h2><i class="fas fa-inbox"></i> Contact Messages</h2>
       <div class="message-list">
         <?php foreach ($contacts as $contact): ?>
@@ -226,6 +335,7 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
 
   <section class="admin-grid lower">
     <article class="admin-card">
+      <span class="admin-section-label">Community</span>
       <h2><i class="fas fa-users"></i> Users</h2>
       <div class="admin-table-wrap">
         <table class="admin-table">
@@ -250,6 +360,7 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
     </article>
 
     <article class="admin-card">
+      <span class="admin-section-label">Recipe Library</span>
       <h2><i class="fas fa-book-open"></i> Recipes</h2>
       <div class="recipe-row-list recipe-admin-list">
         <?php foreach ($adminRecipes as $recipe): ?>
@@ -267,12 +378,16 @@ $cuisines = ["Filipino","Italian","Korean","Japanese","Chinese","Thai","Mexican"
     </article>
   </section>
 </main>
+<?php include "footer.php"; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 const cuisineRows = <?= json_encode($recipesByCuisine, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const difficultyRows = <?= json_encode($recipesByDifficulty, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const viewsRows = <?= json_encode($topViewedRecipes, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const userTrafficRows = <?= json_encode(array_values($userTraffic), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const userTrendRows = <?= json_encode($userTrendRows, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+const actionBreakdownRows = <?= json_encode($actionBreakdownRows, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 const chartPalette = ['#e76f51', '#ffd166', '#4ecdc4', '#2d3047', '#f4a261', '#87a96b', '#cba409', '#6c63ff'];
 
 function chartLabels(rows, fallback) {
@@ -286,6 +401,39 @@ function chartValues(rows) {
 if (window.Chart) {
   Chart.defaults.font.family = 'Poppins, sans-serif';
   Chart.defaults.color = '#555';
+
+  new Chart(document.getElementById('userTrafficChart'), {
+    type: 'bar',
+    data: {
+      labels: userTrafficRows.map(row => row.range),
+      datasets: [
+        { label: 'Active users', data: userTrafficRows.map(row => Number(row.active) || 0), backgroundColor: '#4ecdc4', borderRadius: 8 },
+        { label: 'New registrations', data: userTrafficRows.map(row => Number(row.new) || 0), backgroundColor: '#ffd166', borderRadius: 8 }
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+  });
+
+  new Chart(document.getElementById('userTrendChart'), {
+    type: 'line',
+    data: {
+      labels: userTrendRows.map(row => row.label),
+      datasets: [
+        { label: 'Active users', data: userTrendRows.map(row => Number(row.active) || 0), borderColor: '#e76f51', backgroundColor: 'rgba(231,111,81,.14)', tension: .35, fill: true },
+        { label: 'Registrations', data: userTrendRows.map(row => Number(row.registrations) || 0), borderColor: '#4ecdc4', backgroundColor: 'rgba(78,205,196,.12)', tension: .35, fill: true }
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+  });
+
+  new Chart(document.getElementById('actionBreakdownChart'), {
+    type: 'doughnut',
+    data: {
+      labels: chartLabels(actionBreakdownRows, 'No actions'),
+      datasets: [{ data: chartValues(actionBreakdownRows), backgroundColor: chartPalette, borderWidth: 0 }]
+    },
+    options: { cutout: '58%', plugins: { legend: { position: 'bottom' } } }
+  });
 
   new Chart(document.getElementById('cuisineChart'), {
     type: 'bar',

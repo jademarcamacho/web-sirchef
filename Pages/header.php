@@ -1,7 +1,8 @@
 <?php
 $loggedIn = isset($_SESSION["user_id"]);
+$adminLoggedIn = function_exists("current_admin_account_id") && current_admin_account_id();
 $showAdmin = false;
-if ($loggedIn && isset($conn) && function_exists("is_admin")) {
+if (($loggedIn || $adminLoggedIn) && isset($conn) && function_exists("is_admin")) {
     $showAdmin = is_admin($conn);
 }
 ?>
@@ -23,8 +24,8 @@ if ($loggedIn && isset($conn) && function_exists("is_admin")) {
           <li class="nav-item"><a class="nav-link" href="faq.php">FAQ</a></li>
           <li class="nav-item"><a class="nav-link" href="team.php">Team</a></li>
           <li class="nav-item"><a class="nav-link" href="recipe.php">Recipe</a></li>
-          <?php if ($loggedIn): ?>
-            <li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li>
+          <?php if ($loggedIn || $adminLoggedIn): ?>
+            <?php if ($loggedIn): ?><li class="nav-item"><a class="nav-link" href="dashboard.php">Dashboard</a></li><?php endif; ?>
             <?php if ($showAdmin): ?><li class="nav-item"><a class="nav-link" href="admin.php">Admin</a></li><?php endif; ?>
             <li class="nav-item ms-2"><a href="logout.php" class="btn-header-auth btn-header-login"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
           <?php else: ?>

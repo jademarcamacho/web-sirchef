@@ -8,6 +8,18 @@ function current_user_id(): ?int {
     return isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
 }
 
+function current_admin_account_id(): ?int {
+    return isset($_SESSION['admin_account_id']) ? (int) $_SESSION['admin_account_id'] : null;
+}
+
+function current_admin_username(): string {
+    return $_SESSION['admin_username'] ?? "";
+}
+
+function is_gmail_address(string $email): bool {
+    return (bool) preg_match('/^[A-Z0-9._%+\-]+@gmail\.com$/i', $email);
+}
+
 function require_login(): void {
     if (!current_user_id()) {
         header("Location: index.php");
@@ -15,7 +27,50 @@ function require_login(): void {
     }
 }
 
+function ensure_admin_accounts_table(mysqli $conn): void {
+    $conn->query("CREATE TABLE IF NOT EXISTS admin_accounts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(80) NOT NULL UNIQUE,
+        email VARCHAR(160) NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        display_name VARCHAR(120) NOT NULL DEFAULT 'SirChef Admin',
+        failed_login_attempts INT NOT NULL DEFAULT 0,
+        locked_until DATETIME NULL,
+        last_login_at DATETIME NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )");
+
+    $emailColumn = $conn->query("SHOW COLUMNS FROM admin_accounts LIKE 'email'");
+    if (!$emailColumn || $emailColumn->num_rows === 0) {
+        $conn->query("ALTER TABLE admin_accounts ADD COLUMN email VARCHAR(160) NULL UNIQUE AFTER username");
+    }
+    if ($emailColumn) {
+        $emailColumn->free();
+    }
+    $conn->query("UPDATE admin_accounts SET email = CONCAT(username, '@gmail.com') WHERE email IS NULL OR email = ''");
+
+    $result = $conn->query("SELECT COUNT(*) total FROM admin_accounts");
+    $total = $result ? (int) $result->fetch_assoc()["total"] : 0;
+    if ($result) {
+        $result->free();
+    }
+    if ($total === 0) {
+        $username = "admin";
+        $email = "admin@gmail.com";
+        $displayName = "SirChef Admin";
+        $hash = password_hash("Admin@12345", PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("INSERT INTO admin_accounts (username, email, password, display_name) VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssss", $username, $email, $hash, $displayName);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
 function is_admin(mysqli $conn, ?int $userId = null): bool {
+    if (current_admin_account_id()) {
+        return true;
+    }
     $userId = $userId ?? current_user_id();
     if (!$userId) {
         return false;
@@ -30,7 +85,14 @@ function is_admin(mysqli $conn, ?int $userId = null): bool {
 }
 
 function require_admin(mysqli $conn): void {
-    require_login();
+    ensure_admin_accounts_table($conn);
+    if (current_admin_account_id()) {
+        return;
+    }
+    if (!current_user_id()) {
+        header("Location: admin_login.php");
+        exit;
+    }
     if (!is_admin($conn)) {
         http_response_code(403);
         die("Admin access only.");

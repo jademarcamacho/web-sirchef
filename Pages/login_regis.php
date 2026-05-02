@@ -368,7 +368,7 @@
 
       const formData = new FormData(loginForm);
 
-      fetch('/Web_sys/WEBSITE/Pages/backend.php', {
+      fetch('backend.php', {
         method: 'POST',
         body: formData
       })
@@ -443,7 +443,7 @@
 
       const formData = new FormData(registerForm);
 
-      fetch('/Web_sys/WEBSITE/Pages/backend.php', {
+      fetch('backend.php', {
         method: 'POST',
         body: formData
       })
@@ -495,7 +495,7 @@
       formData.append('action', 'forgot_password');
       formData.append('email', document.getElementById('forgotEmail').value);
 
-      fetch('/Web_sys/WEBSITE/Pages/backend.php', {
+      fetch('backend.php', {
         method: 'POST',
         body: formData
       })

@@ -5,50 +5,57 @@ require_once "helpers.php";
 
 $error = "";
 $notice = "";
+ensure_admin_accounts_table($conn);
 
-if (isset($_SESSION["user_id"]) && is_admin($conn)) {
-    header("Location: admin.php");
+if (current_admin_account_id() || (isset($_SESSION["user_id"]) && is_admin($conn))) {
+    header("Location: admin.php#user-traffic");
     exit;
 }
-
-$adminCount = (int) $conn->query("SELECT COUNT(*) total FROM users WHERE role = 'admin'")->fetch_assoc()["total"];
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $email = strtolower(trim($_POST["email"] ?? ""));
     $password = $_POST["password"] ?? "";
 
-    $stmt = $conn->prepare("SELECT id, first_name, password, role FROM users WHERE email = ? LIMIT 1");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $stmt->bind_result($userId, $firstName, $hash, $role);
-
-    if (!$stmt->fetch()) {
-        $error = "Admin account not found.";
-    } elseif (!password_verify($password, $hash)) {
-        $error = "Wrong admin password.";
-    } elseif ($role !== "admin" && $adminCount > 0) {
-        $error = "This account is not an admin. Ask an existing admin to promote it.";
+    if (!is_gmail_address($email)) {
+        $error = "Use the admin Gmail address ending in @gmail.com.";
     } else {
-        $stmt->close();
+        $stmt = $conn->prepare("SELECT id, username, email, display_name, password, failed_login_attempts, locked_until FROM admin_accounts WHERE email = ? LIMIT 1");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $stmt->bind_result($adminId, $adminUsername, $adminEmail, $displayName, $hash, $failed, $lockedUntil);
 
-        // First-admin setup: if no admin exists, promote this valid user.
-        if ($adminCount === 0) {
-            $promote = $conn->prepare("UPDATE users SET role = 'admin' WHERE id = ?");
-            $promote->bind_param("i", $userId);
-            $promote->execute();
-            $promote->close();
-            log_activity($conn, (int) $userId, "first_admin_created", "user", (int) $userId, "Promoted through admin login.");
+        if (!$stmt->fetch()) {
+            $error = "Admin Gmail account not found.";
+            $stmt->close();
+        } elseif ($lockedUntil && strtotime($lockedUntil) > time()) {
+            $error = "This admin account is temporarily locked. Try again later.";
+            $stmt->close();
+        } elseif (!password_verify($password, $hash)) {
+            $error = "Wrong admin password.";
+            $stmt->close();
+            $failed++;
+            $locked = $failed >= 3 ? date("Y-m-d H:i:s", time() + 15 * 60) : null;
+            $update = $conn->prepare("UPDATE admin_accounts SET failed_login_attempts = ?, locked_until = ? WHERE id = ?");
+            $update->bind_param("isi", $failed, $locked, $adminId);
+            $update->execute();
+            $update->close();
+        } else {
+            $stmt->close();
+
+            $update = $conn->prepare("UPDATE admin_accounts SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = ?");
+            $update->bind_param("i", $adminId);
+            $update->execute();
+            $update->close();
+
+            unset($_SESSION["user_id"], $_SESSION["user_name"]);
+            $_SESSION["admin_account_id"] = (int) $adminId;
+            $_SESSION["admin_username"] = $adminUsername;
+            $_SESSION["admin_email"] = $adminEmail;
+            $_SESSION["admin_display_name"] = $displayName;
+            log_activity($conn, null, "admin_login", "admin", (int) $adminId, $adminEmail . " signed in.");
+            header("Location: admin.php#user-traffic");
+            exit;
         }
-
-        $_SESSION["user_id"] = (int) $userId;
-        $_SESSION["user_name"] = $firstName;
-        log_activity($conn, (int) $userId, "admin_login", "user", (int) $userId, "Admin signed in.");
-        header("Location: admin.php");
-        exit;
-    }
-
-    if (isset($stmt) && $stmt instanceof mysqli_stmt) {
-        $stmt->close();
     }
 }
 ?>
@@ -71,26 +78,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <div class="admin-icon"><i class="fas fa-user-shield"></i></div>
     <h1>Admin Login</h1>
     <p>
-      Sign in with an admin account to manage recipes, users, email settings, and messages.
-      <?php if ($adminCount === 0): ?>
-        <strong>No admin exists yet. The first valid user who logs in here will become admin.</strong>
-      <?php endif; ?>
+      Sign in with the admin-only Gmail address and password to view user traffic, manage recipes, and review messages.
+      <strong>Default local admin: admin@gmail.com with password Admin@12345. Change this password in the database after your first login.</strong>
     </p>
 
     <?php if ($error): ?><div class="alert alert-danger"><?= e($error) ?></div><?php endif; ?>
     <?php if ($notice): ?><div class="alert alert-success"><?= e($notice) ?></div><?php endif; ?>
 
     <form method="post">
-      <label>Email Address</label>
+      <label>Admin Gmail</label>
       <div class="admin-input">
         <i class="fas fa-envelope"></i>
-        <input type="email" name="email" placeholder="admin@example.com" required>
+        <input type="email" name="email" placeholder="admin@gmail.com" pattern="^[A-Za-z0-9._%+\-]+@gmail\.com$" autocomplete="username" required>
       </div>
 
       <label>Password</label>
       <div class="admin-input">
         <i class="fas fa-lock"></i>
-        <input type="password" name="password" placeholder="Admin password" required>
+        <input type="password" name="password" placeholder="Admin password" autocomplete="current-password" required>
       </div>
 
       <button type="submit" class="admin-login-btn"><i class="fas fa-right-to-bracket"></i> Enter Admin</button>
@@ -98,7 +103,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     <div class="admin-login-links">
       <a href="index.php">Back to website</a>
-      <a href="forgot_password.php">Forgot password?</a>
+      <a href="admin.php#user-traffic">View analytics</a>
     </div>
   </section>
 </main>
